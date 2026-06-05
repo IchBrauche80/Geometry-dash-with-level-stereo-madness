@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Stereo Madness - Die Wand</title>
+    <style>
+        body { margin: 0; background-color: #111; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial; }
+        canvas { background-color: #0044cc; box-shadow: 0 0 20px rgba(0, 150, 255, 0.5); border: 2px solid #fff; }
+        #ui { position: absolute; top: 20px; color: white; font-size: 24px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">Münzen: <span id="coinCount">0</span>/1 | Klicke oder Leertaste</div>
+    
+    <canvas id="gameCanvas" width="900" height="400"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const coinText = document.getElementById("coinCount");
+
+        // Spiel-Variablen
+        let cameraX = 0;      
+        let speed = 6;        
+        let coinsCollected = 0;
+        let gameOver = false;
+        let levelComplete = false; 
+
+        // Unser Spieler
+        const player = { x: 150, y: 300, size: 30, dy: 0, gravity: 0.9, jumpForce: -13.5, isGrounded: false };
+
+        // DEIN LEVEL
+        let level = [
+            {x: 500, y: 320, type: "spike"},               
+            {x: 800, y: 320, type: "spike"},               
+            {x: 830, y: 320, type: "spike"},               
+            {x: 1200, y: 290, type: "block", w: 40, h: 30}, 
+            {x: 1240, y: 260, type: "block", w: 40, h: 60}, 
+            {x: 1240, y: 210, type: "coin"},               
+            {x: 1600, y: 320, type: "spike"},              
+            {x: 2000, type: "wall"} // NEU: DIE RIESIGE WAND AM ENDE!
+        ];
+
+        // Springen
+        function jump() {
+            if (player.isGrounded && !gameOver && !levelComplete) {
+                player.dy = player.jumpForce;
+                player.isGrounded = false;
+            }
+            if (gameOver || levelComplete) resetGame(); 
+        }
+
+        window.addEventListener("keydown", (e) => { if (e.code === "Space") jump(); });
+        window.addEventListener("mousedown", jump);
+
+        // Neustart
+        function resetGame() {
+            cameraX = 0;
+            player.y = 200;
+            player.dy = 0;
+            coinsCollected = 0;
+            coinText.innerText = coinsCollected;
+            gameOver = false;
+            levelComplete = false; 
+            level.forEach(obj => { if(obj.type === "coin") obj.collected = false; });
+        }
+
+        function update() {
+            if (gameOver || levelComplete) return; 
+
+            cameraX += speed; 
+
+            // Physik
+            player.dy += player.gravity;
+            player.y += player.dy;
+            player.isGrounded = false;
+
+            let floorY = 320; 
+
+            if (player.y + player.size >= floorY) {
+                player.y = floorY - player.size;
+                player.dy = 0;
+                player.isGrounded = true;
+            }
+
+            let pRight = player.x + player.size;
+            let pLeft = player.x;
+            let pBottom = player.y + player.size;
+            let pTop = player.y;
+
+            for (let obj of level) {
+                let objX = obj.x - cameraX; 
+                
+                // Berühren wir die riesige Wand am Ende?
+                if (obj.type === "wall") {
+                    if (pRight >= objX) {
+                        levelComplete = true; // GEWONNEN!
+                    }
+                }
+                
+                if (objX > 1000 || objX < -100) continue;
+
+                // Stacheln
+                if (obj.type === "spike") {
+                    if (pRight > objX + 10 && pLeft < objX + 20 && pBottom > obj.y - 20) {
+                        gameOver = true;
+                    }
+                } 
+                // Blöcke
+                else if (obj.type === "block") {
+                    if (pRight > objX && pLeft < objX + obj.w && pBottom > obj.y && pTop < obj.y + obj.h) {
+                        if (pBottom - player.dy <= obj.y) {
+                            player.y = obj.y - player.size;
+                            player.dy = 0;
+                            player.isGrounded = true;
+                        } else {
+                            gameOver = true; 
+                        }
+                    }
+                }
+                // Münzen
+                else if (obj.type === "coin" && !obj.collected) {
+                    if (pRight > objX && pLeft < objX + 30 && pBottom > obj.y && pTop < obj.y + 30) {
+                        obj.collected = true;
+                        coinsCollected++;
+                        coinText.innerText = coinsCollected;
+                    }
+                }
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); 
+
+            // Boden
+            ctx.fillStyle = "#002266";
+            ctx.fillRect(0, 320, canvas.width, 80);
+
+            // Objekte malen
+            for (let obj of level) {
+                let objX = obj.x - cameraX;
+                
+                // DIE WAND ZEICHNEN
+                if (obj.type === "wall" && objX < 1000 && objX > -900) {
+                    ctx.fillStyle = "black"; // Pechschwarze Wand
+                    ctx.fillRect(objX, 0, 900, canvas.height); // Füllt den restlichen Bildschirm
+                    
+                    ctx.fillStyle = "white"; // Weißer Rand an der Wand
+                    ctx.fillRect(objX, 0, 5, canvas.height);
+                }
+
+                if (objX > 1000 || objX < -50) continue;
+
+                if (obj.type === "spike") {
+                    ctx.fillStyle = "black";
+                    ctx.beginPath();
+                    ctx.moveTo(objX + 15, obj.y - 30); 
+                    ctx.lineTo(objX + 30, obj.y);      
+                    ctx.lineTo(objX, obj.y);           
+                    ctx.fill();
+                } 
+                else if (obj.type === "block") {
+                    ctx.fillStyle = "#001133";
+                    ctx.fillRect(objX, obj.y, obj.w, obj.h);
+                    ctx.strokeStyle = "white"; 
+                    ctx.strokeRect(objX, obj.y, obj.w, obj.h);
+                }
+                else if (obj.type === "coin" && !obj.collected) {
+                    ctx.fillStyle = "gold";
+                    ctx.beginPath();
+                    ctx.arc(objX + 15, obj.y + 15, 12, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = "orange"; 
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+            }
+
+            // Spieler malen
+            ctx.fillStyle = "#00ff00"; 
+            ctx.fillRect(player.x, player.y, player.size, player.size);
+            ctx.fillStyle = "#00cc00"; 
+            ctx.fillRect(player.x + 5, player.y + 5, player.size - 10, player.size - 10);
+
+            // Text bei Game Over
+            if (gameOver) {
+                ctx.fillStyle = "rgba(0,0,0,0.5)";
+                ctx.fillRect(0,0,canvas.width,canvas.height);
+                ctx.fillStyle = "white";
+                ctx.font = "50px Arial";
+                ctx.fillText("CRASHED!", 320, 180);
+                ctx.font = "20px Arial";
+                ctx.fillText("Klicke zum Neustarten", 350, 230);
+            }
+
+            // Text beim GEWINNEN
+            if (levelComplete) {
+                ctx.fillStyle = "rgba(0, 100, 0, 0.7)"; 
+                ctx.fillRect(0,0,canvas.width,canvas.height);
+                ctx.fillStyle = "gold";
+                ctx.font = "50px Arial";
+                ctx.fillText("LEVEL COMPLETE!", 230, 180);
+                ctx.fillStyle = "white";
+                ctx.font = "25px Arial";
+                ctx.fillText("Münzen gesammelt: " + coinsCollected + "/1", 310, 230);
+                ctx.font = "20px Arial";
+                ctx.fillText("Klicke zum Neustarten", 350, 280);
+            }
+        }
+
+        // Loop
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
